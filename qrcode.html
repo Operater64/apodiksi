@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Reader Ελληνικής Απόδειξης</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0; background: #f4f4f4; color: #183049;
+    }
+    h1 {
+      text-align: center; font-weight: 400; margin-top: 20px;
+    }
+    .container {
+      max-width: 400px;
+      margin: 30px auto;
+      background: #fff;
+      padding: 18px 15px 26px;
+      border-radius: 18px;
+      box-shadow: 0 3px 16px #0002;
+    }
+    .video-wrap {
+      position: relative;
+    }
+    video, canvas.qr-canvas {
+      width: 100%;
+      border-radius: 14px;
+      margin-top: 10px;
+      display: block;
+    }
+    canvas.qr-canvas {
+      position: absolute;
+      left: 0; top: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .result {
+      margin-top: 18px; padding: 12px 9px;
+      background: #dedbfa; border-radius: 12px;
+      min-height: 56px; font-size: 1.09em;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    button {
+      width: 100%; padding: 12px; border: none;
+      border-radius: 9px; background: #6b37e2;
+      color: #fff; font-size: 1.05em; cursor: pointer;
+      transition: background-color 0.25s ease;
+    }
+    button:hover {
+      background: #5428ba;
+    }
+    .msg-status {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 1em;
+      color: #555;
+      min-height: 30px;
+    }
+    .msg-ok {
+      color: #009445;
+      font-weight: 600;
+    }
+    .msg-warn {
+      color: #be381d;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>QR Reader<br />Ελληνικής Απόδειξης</h1>
+    <button id="start-scan">Έναρξη σάρωσης</button>
+    <div class="video-wrap" style="display:none;">
+      <video id="preview" autoplay muted playsinline></video>
+      <canvas class="qr-canvas" id="qr-canvas"></canvas>
+    </div>
+    <div class="msg-status" id="msg-status"></div>
+    <div class="result" id="result">Τα δεδομένα του QR θα εμφανιστούν εδώ.</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr"></script>
+  <script>
+    const startBtn = document.getElementById('start-scan');
+    const video = document.getElementById('preview');
+    const resultDiv = document.getElementById('result');
+    const msgStatus = document.getElementById('msg-status');
+    const videoWrap = document.querySelector('.video-wrap');
+    const qrCanvas = document.getElementById('qr-canvas');
+    let scanning = false, stream = null, lastQRData = '';
+
+    startBtn.onclick = async () => {
+      resultDiv.textContent = '';
+      msgStatus.textContent = 'Σάρωση...';
+      msgStatus.className = 'msg-status';
+      startBtn.style.display = 'none';
+      videoWrap.style.display = 'block';
+      lastQRData = '';
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        scanning = true;
+        scan();
+      } catch (e) {
+        msgStatus.textContent = 'Δεν βρέθηκε κάμερα ή δεν δόθηκε άδεια.';
+        msgStatus.className = "msg-status msg-warn";
+        startBtn.style.display = 'block';
+        videoWrap.style.display = 'none';
+      }
+    };
+
+    function drawOutline(location, ctx, scaleX=1, scaleY=1) {
+      if (!location) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(location.topLeftCorner.x*scaleX, location.topLeftCorner.y*scaleY);
+      ctx.lineTo(location.topRightCorner.x*scaleX, location.topRightCorner.y*scaleY);
+      ctx.lineTo(location.bottomRightCorner.x*scaleX, location.bottomRightCorner.y*scaleY);
+      ctx.lineTo(location.bottomLeftCorner.x*scaleX, location.bottomLeftCorner.y*scaleY);
+      ctx.closePath();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#38ef7d";
+      ctx.shadowColor = "#22d661";
+      ctx.shadowBlur = 7;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function scan() {
+      if (!scanning) return;
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        setTimeout(scan, 50);
+        return;
+      }
+      qrCanvas.width = video.videoWidth || 400;
+      qrCanvas.height = video.videoHeight || 300;
+      const ctx = qrCanvas.getContext('2d');
+      ctx.clearRect(0,0, qrCanvas.width, qrCanvas.height);
+
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = video.videoWidth || 400;
+      tmpCanvas.height = video.videoHeight || 300;
+      const tmpCtx = tmpCanvas.getContext('2d');
+      tmpCtx.drawImage(video,0,0,tmpCanvas.width,tmpCanvas.height);
+      const imageData = tmpCtx.getImageData(0,0,tmpCanvas.width,tmpCanvas.height);
+
+      const code = jsQR(imageData.data, tmpCanvas.width, tmpCanvas.height);
+      if (code) {
+        drawOutline(code.location, ctx);
+        msgStatus.textContent = 'QR εντοπίστηκε!';
+        msgStatus.className = "msg-status msg-ok";
+        if (code.data !== lastQRData) {
+          lastQRData = code.data;
+          resultDiv.innerHTML = '<b>QR:</b><br>' + code.data;
+        }
+      } else {
+        msgStatus.textContent = 'Δεν βρέθηκε QR – Σάρωση…';
+        msgStatus.className = "msg-status";
+      }
+      // συνεχίζει πάντα live για να υπάρχει outline όσο βλέπει QR
+      setTimeout(scan, 50);
+    }
+  </script>
+</body>
+</html>
