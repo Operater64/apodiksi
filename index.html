@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ελληνικές Αποδείξεις & Τιμολόγια - QR Tabs App</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f4f4f4; color: #183049;}
+    h1 { text-align: center; font-weight: 400; margin: 20px 10px 10px;}
+    .container { max-width: 420px; margin: 0 auto 30px; background: #fff; padding: 18px 15px 26px; border-radius: 18px; box-shadow:0 3px 16px #0002;}
+    .tabs { margin-top: 16px; display: flex; justify-content: space-around; border-bottom: 2px solid #ddd; user-select: none;}
+    .tabs button { flex: 1; background: transparent; border: none; border-bottom: 3px solid transparent; padding: 10px 5px 6px; font-weight: 600; font-size: 1.07em; cursor: pointer; color: #555; transition: border-color 0.3s, color 0.3s;}
+    .tabs button.active { border-color: #6b37e2; color: #6b37e2;}
+    .section { display: none; }
+    .section.active { display: block; }
+    .video-wrap { position:relative; margin-top:10px; border-radius:14px; overflow:hidden; background:#000; height:300px;}
+    video, canvas.qr-canvas { width:100%; height:100%; display:block; }
+    canvas.qr-canvas { position:absolute; top:0; left:0; pointer-events:none; z-index:2;}
+    button#start-scan { width: 100%; padding: 12px; border: none; border-radius: 9px; background: #6b37e2; color: white; font-size: 1.05em; cursor: pointer; transition: background-color 0.25s ease; user-select: none;}
+    button#start-scan:hover:not(:disabled) { background: #5428ba;}
+    button#start-scan:disabled { background: #999; cursor: not-allowed;}
+    .msg-status { text-align:center; margin:12px 0 0 0; font-size:1em; color:#555; min-height:40px; user-select:none; white-space:pre-wrap; word-break:break-word;}
+    .msg-ok { color: #009445; font-weight: 600;}
+    .msg-warn { color: #be381d; font-weight: 500;}
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.93em; }
+    th,td { padding: 8px 6px; border-bottom: 1px solid #ccc; text-align: center; vertical-align: middle; word-break: break-word;}
+    thead { background: #6b37e2; color: #fff; border-radius: 6px;}
+    tbody tr:nth-child(even) { background: #f7f5ff;}
+    tbody tr:hover { background: #eae7ff;}
+    button.delete-btn { background: #be381d; color: white; border: none; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: 700; font-size: 0.85em; transition: background-color 0.2s;}
+    button.delete-btn:hover { background: #8c2512;}
+    .stats { margin-top: 16px; background: #dedbfa; padding:12px 14px; border-radius:12px; font-size:0.93em; color:#183049; user-select:none;}
+    .stats strong { color:#6b37e2; font-weight:600;}
+    .desc-input { width:90%; min-width:55px; border:1px solid #bbb; border-radius:7px; padding:3px 5px; font-size:1em; }
+    .raw-data { margin-top:12px; font-size:0.85em; color:#444; background:#eee; padding:10px; border-radius:12px; max-height:100px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; user-select:text;}
+    a.qrlink { color:#4653c4; word-break:break-all; text-decoration:underline;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>QR Tabs App<br>Αποδείξεις & Τιμολόγια 1.6</h1>
+    <div class="tabs">
+      <button id="tab-qrs" class="active">Σάρωση QR</button>
+      <button id="tab-receipts">Αποδείξεις</button>
+      <button id="tab-invoices">Τιμολόγια</button>
+    </div>
+    <!-- QR reader -->
+    <div class="section active" id="section-qr">
+      <button id="start-scan">Έναρξη σάρωσης</button>
+      <div class="video-wrap" style="display:none;">
+        <video id="preview" autoplay muted playsinline></video>
+        <canvas class="qr-canvas" id="qr-canvas"></canvas>
+      </div>
+      <div class="msg-status" id="msg-status"></div>
+      <div class="raw-data" id="raw-data" title="Raw data τελευταίου QR">Δεν έχει διαβαστεί ακόμη QR.</div>
+    </div>
+    <!-- Απόδειξη -->
+    <div class="section" id="section-receipts">
+      <table>
+        <thead>
+          <tr>
+            <th>Ημερομηνία</th>
+            <th>ΑΦΜ Πωλητή</th>
+            <th>Αριθμός Απόδειξης</th>
+            <th>Αξία</th>
+            <th>ΦΠΑ</th>
+            <th>Link (QR)</th>
+            <th>Περιγραφή</th>
+            <th>Ενέργεια</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-receipts"></tbody>
+      </table>
+      <div class="stats" id="stats-receipts"></div>
+    </div>
+    <!-- Τιμολόγιο -->
+    <div class="section" id="section-invoices">
+      <table>
+        <thead>
+          <tr>
+            <th>Ημερομηνία</th>
+            <th>ΑΦΜ Πωλητή</th>
+            <th>ΑΦΜ Αγοραστή</th>
+            <th>Αριθμός Τιμολογίου</th>
+            <th>Αξία</th>
+            <th>ΦΠΑ</th>
+            <th>Link (QR)</th>
+            <th>Περιγραφή</th>
+            <th>Ενέργεια</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-invoices"></tbody>
+      </table>
+      <div class="stats" id="stats-invoices"></div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr"></script>
+  <script>
+    // localStorage storage keys
+    const STORAGE_KEYS = { RECEIPTS:'qrapp2_receipts', INVOICES:'qrapp2_invoices' };
+    // app data
+    let receipts = [], invoices = [], scanning=false, stream=null, lastQRData='', activeTab='qrs';
+    // DOM refs
+    const tabs = { qrs:document.getElementById('tab-qrs'), receipts:document.getElementById('tab-receipts'), invoices:document.getElementById('tab-invoices') };
+    const sections = { qr:document.getElementById('section-qr'), receipts:document.getElementById('section-receipts'), invoices:document.getElementById('section-invoices') };
+    const video = document.getElementById('preview');
+    const videoWrap = document.querySelector('.video-wrap');
+    const qrCanvas = document.getElementById('qr-canvas');
+    const startBtn = document.getElementById('start-scan');
+    const msgStatus = document.getElementById('msg-status');
+    const rawDataDiv = document.getElementById('raw-data');
+    // Tabs switching
+    Object.entries(tabs).forEach(([key,btn])=>{
+      btn.onclick=()=>switchTab(key);
+    });
+    function switchTab(tab) {
+      activeTab=tab;
+      Object.entries(sections).forEach(([k,s])=>s.classList.toggle('active',tab===k||(tab==='qrs'&&k==='qr')));
+      Object.entries(tabs).forEach(([k,btn])=>btn.classList.toggle('active',tab===k));
+      if(tab!=='qrs' && scanning) stopScanning();
+      updateStats();
+      renderTables();
+    }
+    // LocalStorage
+    function loadFromStorage() {
+      receipts = JSON.parse(localStorage.getItem(STORAGE_KEYS.RECEIPTS)||'[]');
+      invoices = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVOICES)||'[]');
+    }
+    function saveToStorage() {
+      localStorage.setItem(STORAGE_KEYS.RECEIPTS,JSON.stringify(receipts));
+      localStorage.setItem(STORAGE_KEYS.INVOICES,JSON.stringify(invoices));
+    }
+    // QR parsing
+    function parseAADEQR(data, linkVal='') {
+      const parts = data.split('|');
+      if (parts.length < 7) return null;
+      const afmSeller = parts[0].trim();
+      const afmBuyer = parts[1].trim();
+      const datetimeStr = parts[2].trim();
+      const docNumber = parts[3].trim();
+      const totalStr = parts[4].trim();
+      const vatStr = parts[5].trim();
+      const docTypeStr = parts[6].trim();
+      let docType = null;
+      if (docTypeStr === '1') docType = 'receipt';
+      else if (docTypeStr === '3') docType = 'invoice';
+      else return null;
+      let formattedDate = '';
+      if (/^\d{14}$/.test(datetimeStr)) {
+        formattedDate = datetimeStr.slice(0,4)+'-'+datetimeStr.slice(4,6)+'-'+datetimeStr.slice(6,8)
+          +' '+datetimeStr.slice(8,10)+':'+datetimeStr.slice(10,12)+':'+datetimeStr.slice(12,14);}
+      const total = parseFloat(totalStr.replace(',','.'))||0;
+      const vat = parseFloat(vatStr.replace(',','.'))||0;
+      if (docType==='receipt') {
+        return { type:docType, date:formattedDate, afmSeller, docNumber, total, vat, link:linkVal, description:'' };
+      } else {
+        return { type:docType, date:formattedDate, afmSeller, afmBuyer, docNumber, total, vat, link:linkVal, description:'' };
+      }
+    }
+    function isUrlQR(str) {
+      return /^https?:\/\//.test(str.trim());
+    }
+    // QR Reader (όταν ο χρήστης είναι στο Tab "Σάρωση QR")
+    startBtn.onclick = async ()=>{ startBtn.disabled=true; lastQRData='';
+      msgStatus.textContent='Σάρωση...';msgStatus.className='msg-status';rawDataDiv.textContent='Δεν έχει διαβαστεί ακόμη QR.';
+      try { stream = await navigator.mediaDevices.getUserMedia({
+        video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }
+      });
+        video.srcObject = stream; scanning=true; videoWrap.style.display='block'; scan();
+      } catch(e) { msgStatus.textContent = 'Δεν βρέθηκε κάμερα ή δεν δόθηκε άδεια.'; msgStatus.className='msg-status msg-warn'; startBtn.disabled=false; return;}
+      startBtn.textContent='Σταμάτημα σάρωσης'; startBtn.disabled=false; startBtn.onclick=stopScanning;
+    };
+    function stopScanning() {
+      scanning=false; if(stream)stream.getTracks().forEach(track=>track.stop());
+      videoWrap.style.display='none';msgStatus.textContent='Σάρωση σταματημένη.';lastQRData='';
+      startBtn.textContent='Έναρξη σάρωσης'; startBtn.onclick=async()=>{location.reload();};
+    }
+    function drawOutline(location,ctx){if(!location)return;ctx.save();ctx.beginPath();
+      ctx.moveTo(location.topLeftCorner.x,location.topLeftCorner.y);ctx.lineTo(location.topRightCorner.x,location.topRightCorner.y);
+      ctx.lineTo(location.bottomRightCorner.x,location.bottomRightCorner.y);ctx.lineTo(location.bottomLeftCorner.x,location.bottomLeftCorner.y);
+      ctx.closePath();ctx.lineWidth=4;ctx.strokeStyle='#38ef7d';ctx.shadowColor='#22d661';ctx.shadowBlur=7;ctx.stroke();ctx.restore();
+    }
+    function scan() {
+      if(!scanning)return;
+      if(video.readyState!==video.HAVE_ENOUGH_DATA){setTimeout(scan,50);return;}
+      qrCanvas.width=video.videoWidth||400; qrCanvas.height=video.videoHeight||300;
+      const ctx=qrCanvas.getContext('2d');ctx.clearRect(0,0,qrCanvas.width,qrCanvas.height);
+      const tmpCanvas=document.createElement('canvas'); tmpCanvas.width=qrCanvas.width;tmpCanvas.height=qrCanvas.height;
+      const tmpCtx=tmpCanvas.getContext('2d');tmpCtx.drawImage(video,0,0,tmpCanvas.width,tmpCanvas.height);
+      const imageData=tmpCtx.getImageData(0,0,tmpCanvas.width,tmpCanvas.height);
+      const code=jsQR(imageData.data,tmpCanvas.width,tmpCanvas.height);
+      if(code){ drawOutline(code.location,ctx);
+        msgStatus.textContent='QR εντοπίστηκε!';msgStatus.className='msg-status msg-ok';rawDataDiv.textContent=code.data;
+        if(code.data!==lastQRData){ lastQRData=code.data;
+          let rec=null, urlfound='';
+          if(isUrlQR(code.data)) urlfound=code.data;
+          rec=parseAADEQR(code.data, urlfound);
+          if(rec) {
+            if(rec.type==='receipt'){receipts.push(rec);switchTab('receipts');}
+            else if(rec.type==='invoice'){invoices.push(rec);switchTab('invoices');}
+            saveToStorage(); renderTables();
+          } else if(urlfound) {
+            // Αν είναι μόνο URL αλλά όχι δεδομένα AADE, το βάζουμε ως "αποδείξη με μόνο link"
+            let dummy = { date:'', afmSeller:'', docNumber:'', total:0, vat:0, link:urlfound, description:'' };
+            receipts.push(dummy); switchTab('receipts'); saveToStorage(); renderTables();
+          }
+        }
+      } else { ctx.clearRect(0,0,qrCanvas.width,qrCanvas.height); msgStatus.textContent='Δεν βρέθηκε QR – Σάρωση...'; msgStatus.className='msg-status'; rawDataDiv.textContent = 'Δεν έχει διαβαστεί ακόμη QR.';}
+      setTimeout(scan,50);
+    }
+    // -- Πίνακες
+    function renderTables() {
+      // -- Αποδείξεις
+      const tb=document.getElementById('tbody-receipts');tb.innerHTML='';
+      receipts.forEach((r,idx)=>{
+        let tr=document.createElement('tr');
+        tr.innerHTML=`<td>${r.date||''}</td>
+        <td>${r.afmSeller||''}</td>
+        <td>${r.docNumber||''}</td>
+        <td>${Number(r.total||0).toFixed(2)}</td>
+        <td>${Number(r.vat||0).toFixed(2)}</td>
+        <td>${r.link? `<a href="${r.link}" target="_blank" class="qrlink">${r.link}</a>`:''}</td>
+        <td><input type="text" class="desc-input" data-type="receipt" data-idx="${idx}" value="${r.description? r.description.replace(/"/g,'&quot;'):''}" /></td>
+        <td><button class="delete-btn" data-type="receipt" data-idx="${idx}">Διαγραφή</button></td>`;
+        tb.appendChild(tr);
+      });
+      // -- Τιμολόγια
+      const ti=document.getElementById('tbody-invoices');ti.innerHTML='';
+      invoices.forEach((r,idx)=>{
+        let tr=document.createElement('tr');
+        tr.innerHTML=`<td>${r.date||''}</td>
+        <td>${r.afmSeller||''}</td>
+        <td>${r.afmBuyer||''}</td>
+        <td>${r.docNumber||''}</td>
+        <td>${Number(r.total||0).toFixed(2)}</td>
+        <td>${Number(r.vat||0).toFixed(2)}</td>
+        <td>${r.link? `<a href="${r.link}" target="_blank" class="qrlink">${r.link}</a>`:''}</td>
+        <td><input type="text" class="desc-input" data-type="invoice" data-idx="${idx}" value="${r.description? r.description.replace(/"/g,'&quot;'):''}" /></td>
+        <td><button class="delete-btn" data-type="invoice" data-idx="${idx}">Διαγραφή</button></td>`;
+        ti.appendChild(tr);
+      });
+      saveToStorage();
+      updateStats();
+    }
+    function updateStats(){
+      let r=receipts,i=invoices,rc=r.length,ic=i.length;
+      let rTot=r.reduce((a,v)=>a+(v.total||0),0),rvat=r.reduce((a,v)=>a+(v.vat||0),0);
+      let iTot=i.reduce((a,v)=>a+(v.total||0),0),ivat=i.reduce((a,v)=>a+(v.vat||0),0);
+      document.getElementById('stats-receipts').textContent=`Σύνολο εγγραφών: ${rc} | Σύνολο: €${rTot.toFixed(2)} | ΦΠΑ: €${rvat.toFixed(2)}`;
+      document.getElementById('stats-invoices').textContent=`Σύνολο εγγραφών: ${ic} | Σύνολο: €${iTot.toFixed(2)} | ΦΠΑ: €${ivat.toFixed(2)}`;
+    }
+    // Διαγραφή & περιγραφή
+    document.addEventListener('click',function(e){
+      if(!e.target.classList.contains('delete-btn')) return;
+      const t=e.target.dataset.type, idx=Number(e.target.dataset.idx);
+      if(t==='receipt' && receipts[idx]){receipts.splice(idx,1);}
+      if(t==='invoice' && invoices[idx]){invoices.splice(idx,1);}
+      saveToStorage(); renderTables();
+    });
+    document.addEventListener('input',function(e){
+      if(!e.target.classList.contains('desc-input')) return;
+      const t=e.target.dataset.type, idx=Number(e.target.dataset.idx), val=e.target.value;
+      if(t==='receipt' && receipts[idx]){receipts[idx].description=val;}
+      if(t==='invoice' && invoices[idx]){invoices[idx].description=val;}
+      saveToStorage();
+    });
+    window.addEventListener('load',()=>{
+      loadFromStorage(); renderTables();
+    });
+  </script>
+</body>
+</html>
