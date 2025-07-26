@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Reader Ελληνικών Αποδείξεων & Τιμολογίων</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    /* Βασικό στυλ */
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      background: #f4f4f4;
+      color: #183049;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1 {
+      text-align: center;
+      font-weight: 400;
+      margin: 20px 10px 10px;
+    }
+    .container {
+      max-width: 420px;
+      margin: 0 auto 30px;
+      background: #fff;
+      padding: 18px 15px 26px;
+      border-radius: 18px;
+      box-shadow: 0 3px 16px #0002;
+    }
+    /* Κουμπί έναρξης */
+    button#start-scan {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 9px;
+      background: #6b37e2;
+      color: #fff;
+      font-size: 1.05em;
+      cursor: pointer;
+      transition: background-color 0.25s ease;
+      user-select: none;
+    }
+    button#start-scan:hover:not(:disabled) {
+      background: #5428ba;
+    }
+    button#start-scan:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+    /* Video & canvas (outline) */
+    .video-wrap {
+      position: relative;
+      margin-top: 10px;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #000;
+      height: 300px;
+    }
+    video, canvas.qr-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    canvas.qr-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    /* Μήνυμα κατάστασης */
+    .msg-status {
+      text-align: center;
+      margin: 12px 0 0 0;
+      font-size: 1em;
+      color: #555;
+      min-height: 30px;
+      user-select: none;
+    }
+    .msg-ok {
+      color: #009445;
+      font-weight: 600;
+    }
+    .msg-warn {
+      color: #be381d;
+      font-weight: 500;
+    }
+    /* Tabs navigation - ΠΑΝΤΑ ορατά */
+    .tabs {
+      margin-top: 22px;
+      display: flex;
+      justify-content: space-around;
+      border-bottom: 2px solid #ddd;
+      user-select: none;
+    }
+    .tabs button {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      padding: 10px 5px 6px;
+      font-weight: 600;
+      font-size: 1.1em;
+      cursor: pointer;
+      color: #555;
+      transition: border-color 0.3s, color 0.3s;
+    }
+    .tabs button.active {
+      border-color: #6b37e2;
+      color: #6b37e2;
+    }
+    /* Πίνακες */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 0.9em;
+    }
+    thead {
+      background: #6b37e2;
+      color: #fff;
+      border-radius: 6px;
+    }
+    th, td {
+      padding: 8px 6px;
+      border-bottom: 1px solid #ccc;
+      text-align: center;
+      vertical-align: middle;
+    }
+    tbody tr:nth-child(even) {
+      background: #f7f5ff;
+    }
+    tbody tr:hover {
+      background: #eae7ff;
+    }
+    /* Κουμπί διαγραφής */
+    button.delete-btn {
+      background: #be381d;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.85em;
+      transition: background-color 0.2s ease;
+    }
+    button.delete-btn:hover {
+      background: #8c2512;
+    }
+    /* Στατιστικά */
+    .stats {
+      margin-top: 16px;
+      background: #dedbfa;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 0.9em;
+      color: #183049;
+      user-select: none;
+    }
+    .stats strong {
+      color: #6b37e2;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>QR Reader<br>Ελληνικών Αποδείξεων & Τιμολογίων</h1>
+
+    <button id="start-scan">Έναρξη σάρωσης</button>
+
+    <div class="video-wrap" style="display:none;">
+      <video id="preview" autoplay muted playsinline></video>
+      <canvas class="qr-canvas" id="qr-canvas"></canvas>
+    </div>
+
+    <div class="msg-status" id="msg-status"></div>
+
+    <!-- Tabs πάντοτε ορατά -->
+    <div class="tabs">
+      <button id="tab-receipts" class="active">Αποδείξεις</button>
+      <button id="tab-invoices">Τιμολόγια</button>
+    </div>
+
+    <!-- Πίνακες -->
+    <div id="tables" style="display:none;">
+
+      <table id="table-receipts">
+        <thead>
+          <tr>
+            <th>Ημερομηνία</th>
+            <th>ΑΦΜ</th>
+            <th>Αξία (€)</th>
+            <th>ΦΠΑ (€)</th>
+            <th>Ενέργεια</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <table id="table-invoices" style="display:none;">
+        <thead>
+          <tr>
+            <th>Ημερομηνία</th>
+            <th>ΑΦΜ Εκδότη</th>
+            <th>ΑΦΜ Αποδέκτη</th>
+            <th>Αξία (€)</th>
+            <th>ΦΠΑ (€)</th>
+            <th>Ενέργεια</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr"></script>
+  <script>
+    // Στοιχεία DOM
+    const startBtn = document.getElementById('start-scan');
+    const video = document.getElementById('preview');
+    const msgStatus = document.getElementById('msg-status');
+    const videoWrap = document.querySelector('.video-wrap');
+    const qrCanvas = document.getElementById('qr-canvas');
+    const tabs = document.querySelector('.tabs');
+    const tabReceiptsBtn = document.getElementById('tab-receipts');
+    const tabInvoicesBtn = document.getElementById('tab-invoices');
+    const tableReceipts = document.getElementById('table-receipts');
+    const tableInvoices = document.getElementById('table-invoices');
+    const tablesDiv = document.getElementById('tables');
+    const statsDiv = document.getElementById('stats');
+
+    let scanning = false, stream = null;
+    let lastQRData = '';
+    let receipts = [];
+    let invoices = [];
+    let activeTab = 'receipts'; // default tab
+
+    // Αρχικά κρύβε πίνακες και ενεργοποίησε tabs (τα tabs είναι πάντα ορατά)
+    tablesDiv.style.display = 'none';
+    tableInvoices.style.display = 'none';
+    tableReceipts.style.display = '';
+
+    // Εναλλαγή μεταξύ tabs
+    tabReceiptsBtn.onclick = () => {
+      if (activeTab === 'receipts') return;
+      activeTab = 'receipts';
+      tabReceiptsBtn.classList.add('active');
+      tabInvoicesBtn.classList.remove('active');
+      tableReceipts.style.display = '';
+      tableInvoices.style.display = 'none';
+      updateStats();
+    };
+    tabInvoicesBtn.onclick = () => {
+      if (activeTab === 'invoices') return;
+      activeTab = 'invoices';
+      tabInvoicesBtn.classList.add('active');
+      tabReceiptsBtn.classList.remove('active');
+      tableInvoices.style.display = '';
+      tableReceipts.style.display = 'none';
+      updateStats();
+    };
+
+    // Ξεκίνα σάρωση
+    startBtn.onclick = async () => {
+      msgStatus.textContent = 'Σάρωση...';
+      msgStatus.className = 'msg-status';
+      startBtn.disabled = true;
+      lastQRData = '';
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        scanning = true;
+        videoWrap.style.display = 'block';
+        tablesDiv.style.display = 'block';
+        startBtn.textContent = 'Σταμάτημα σάρωσης';
+        scan();
+      } catch (e) {
+        msgStatus.textContent = 'Δεν βρέθηκε κάμερα ή δεν δόθηκε άδεια.';
+        msgStatus.className = 'msg-status msg-warn';
+        startBtn.disabled = false;
+        return;
+      }
+
+      startBtn.disabled = false;
+
+      // Αλλάζουμε το κουμπί για να σταματήσει η σάρωση
+      startBtn.onclick = stopScanning;
+    };
+
+    function stopScanning() {
+      scanning = false;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      videoWrap.style.display = 'none';
+      msgStatus.textContent = 'Σάρωση σταματημένη.';
+      startBtn.textContent = 'Έναρξη σάρωσης';
+      lastQRData = '';
+      startBtn.onclick = async () => {
+        msgStatus.textContent = '';
+        msgStatus.className = 'msg-status';
+        startBtn.disabled = true;
+        receipts = [];
+        invoices = [];
+        renderTables();
+        updateStats();
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+          });
+          video.srcObject = stream;
+          scanning = true;
+          videoWrap.style.display = 'block';
+          tablesDiv.style.display = 'block';
+          startBtn.textContent = 'Σταμάτημα σάρωσης';
+          scan();
+        } catch (e) {
+          msgStatus.textContent = 'Δεν βρέθηκε κάμερα ή δεν δόθηκε άδεια.';
+          msgStatus.className = 'msg-status msg-warn';
+          startBtn.disabled = false;
+          return;
+        }
+        startBtn.disabled = false;
+        startBtn.onclick = stopScanning;
+      };
+    }
+
+    function drawOutline(location, ctx) {
+      if (!location) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y);
+      ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y);
+      ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y);
+      ctx.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y);
+      ctx.closePath();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#38ef7d";
+      ctx.shadowColor = "#22d661";
+      ctx.shadowBlur = 7;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Απλό parse για διαχωρισμό αποδείξεων και τιμολογίων κλπ
+    function parseQRData(data) {
+      let fields = [];
+      if (data.includes('|')) {
+        fields = data.split('|');
+      } else if (data.includes('\n')) {
+        fields = data.split('\n');
+      } else {
+        fields = [data];
+      }
+
+      let dateField = '';
+      for (const f of fields) {
+        if (/^\d{8}$/.test(f)) {
+          dateField = `${f.slice(0,4)}-${f.slice(4,6)}-${f.slice(6)}`;
+          break;
+        }
+        if (/\d{4}-\d{2}-\d{2}/.test(f)) {
+          dateField = f.match(/\d{4}-\d{2}-\d{2}/)[0];
+          break;
+        }
+        if (/\d{2}\/\d{2}\/\d{4}/.test(f)) {
+          let m = f.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          dateField = `${m[3]}-${m[2]}-${m[1]}`;
+          break;
+        }
+      }
+
+      const afmRegex = /\b\d{9}\b/;
+      const afmsFound = fields.filter(f => afmRegex.test(f));
+      let type = 'receipt';
+      if (afmsFound.length >= 2) type = 'invoice';
+      else if (afmsFound.length === 1) type = 'receipt';
+
+      let numbers = fields.map(f => {
+        let n = parseFloat(f.replace(',', '.').replace(/[^\d\.\-]+/g,''));
+        return isNaN(n) ? null : n;
+      }).filter(n => n !== null);
+
+      const totalValue = numbers.length > 0 ? numbers[0] : null;
+      const vatValue = numbers.length > 1 ? numbers[1] : null;
+
+      let afmIssuer = afmsFound.length > 0 ? afmsFound[0] : '';
+      let afmRecipient = afmsFound.length > 1 ? afmsFound[1] : '';
+
+      if (type === 'receipt') {
+        return {
+          type,
+          date: dateField || '',
+          afm: afmsFound[0] || '',
+          total: totalValue,
+          vat: vatValue
+        };
+      } else {
+        return {
+          type,
+          date: dateField || '',
+          afmIssuer,
+          afmRecipient,
+          total: totalValue,
+          vat: vatValue
+        };
+      }
+    }
+
+    function renderTables() {
+      const tbodyReceipts = tableReceipts.querySelector('tbody');
+      tbodyReceipts.innerHTML = '';
+      receipts.forEach((r, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.date}</td>
+          <td>${r.afm}</td>
+          <td>${r.total !== null ? r.total.toFixed(2) : ''}</td>
+          <td>${r.vat !== null ? r.vat.toFixed(2) : ''}</td>
+          <td><button class="delete-btn" data-type="receipt" data-idx="${idx}">Διαγραφή</button></td>
+        `;
+        tbodyReceipts.appendChild(tr);
+      });
+
+      const tbodyInvoices = tableInvoices.querySelector('tbody');
+      tbodyInvoices.innerHTML = '';
+      invoices.forEach((inv, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${inv.date}</td>
+          <td>${inv.afmIssuer}</td>
+          <td>${inv.afmRecipient}</td>
+          <td>${inv.total !== null ? inv.total.toFixed(2) : ''}</td>
+          <td>${inv.vat !== null ? inv.vat.toFixed(2) : ''}</td>
+          <td><button class="delete-btn" data-type="invoice" data-idx="${idx}">Διαγραφή</button></td>
+        `;
+        tbodyInvoices.appendChild(tr);
+      });
+      updateStats();
+    }
+
+    function updateStats() {
+      let receiptCount = receipts.length;
+      let invoiceCount = invoices.length;
+
+      let receiptTotal = receipts.reduce((acc, r) => acc + (r.total || 0), 0);
+      let receiptVat = receipts.reduce((acc, r) => acc + (r.vat || 0), 0);
+      let invoiceTotal = invoices.reduce((acc, r) => acc + (r.total || 0), 0);
+      let invoiceVat = invoices.reduce((acc, r) => acc + (r.vat || 0), 0);
+
+      if (activeTab === 'receipts') {
+        statsDiv.innerHTML = `
+          <strong>Αποδείξεις:</strong> ${receiptCount} εγγραφές | Σύνολο Αξίας: €${receiptTotal.toFixed(2)} | Σύνολο ΦΠΑ: €${receiptVat.toFixed(2)}
+        `;
+      } else {
+        statsDiv.innerHTML = `
+          <strong>Τιμολόγια:</strong> ${invoiceCount} εγγραφές | Σύνολο Αξίας: €${invoiceTotal.toFixed(2)} | Σύνολο ΦΠΑ: €${invoiceVat.toFixed(2)}
+        `;
+      }
+    }
+
+    // Διαγραφή γραμμών
+    document.addEventListener('click', e => {
+      if (e.target.classList.contains('delete-btn')) {
+        const type = e.target.dataset.type;
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (type === 'receipt' && receipts[idx]) {
+          receipts.splice(idx,1);
+          renderTables();
+        } else if (type === 'invoice' && invoices[idx]) {
+          invoices.splice(idx,1);
+          renderTables();
+        }
+      }
+    });
+
+    function scan() {
+      if (!scanning) return;
+
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        setTimeout(scan, 50);
+        return;
+      }
+
+      qrCanvas.width = video.videoWidth || 400;
+      qrCanvas.height = video.videoHeight || 300;
+      const ctx = qrCanvas.getContext('2d');
+      ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
+
+      // Σχεδίαση video για jsQR
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = video.videoWidth || 400;
+      tmpCanvas.height = video.videoHeight || 300;
+      const tmpCtx = tmpCanvas.getContext('2d');
+      tmpCtx.drawImage(video, 0, 0, tmpCanvas.width, tmpCanvas.height);
+      const imageData = tmpCtx.getImageData(0, 0, tmpCanvas.width, tmpCanvas.height);
+
+      const code = jsQR(imageData.data, tmpCanvas.width, tmpCanvas.height);
+
+      if (code) {
+        drawOutline(code.location, ctx);
+        msgStatus.textContent = 'QR εντοπίστηκε!';
+        msgStatus.className = 'msg-status msg-ok';
+
+        if (code.data !== lastQRData) {
+          lastQRData = code.data;
+
+          const parsed = parseQRData(code.data);
+
+          if (parsed.type === 'receipt') {
+            receipts.push(parsed);
+            activeTab = 'receipts';
+            tabReceiptsBtn.classList.add('active');
+            tabInvoicesBtn.classList.remove('active');
+            tableReceipts.style.display = '';
+            tableInvoices.style.display = 'none';
+          } else if (parsed.type === 'invoice') {
+            invoices.push(parsed);
+            activeTab = 'invoices';
+            tabInvoicesBtn.classList.add('active');
+            tabReceiptsBtn.classList.remove('active');
+            tableInvoices.style.display = '';
+            tableReceipts.style.display = 'none';
+          }
+          renderTables();
+        }
+      } else {
+        ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
+        msgStatus.textContent = 'Δεν βρέθηκε QR – Σάρωση...';
+        msgStatus.className = 'msg-status';
+      }
+      setTimeout(scan, 50);
+    }
+  </script>
+</body>
+</html>
